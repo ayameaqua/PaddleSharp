@@ -107,15 +107,21 @@ namespace Sdcb.PaddleInference
             var plod = PaddleNative.PD_TensorGetLod(_ptr);
             var _pload = new IntPtr(plod.ToPointer());
             var lod = new UIntPtr[Marshal.ReadIntPtr(_pload).ToInt64()][];
+            
             _pload = _pload + IntPtr.Size;
+            _pload = Marshal.ReadIntPtr(_pload);
+
+
             for (int i = 0; i < lod.Length;i++)
             {
                 var one_ptr = Marshal.ReadIntPtr(_pload);
                 if(one_ptr != IntPtr.Zero)
                 {
-                    lod[i] = new nuint[Marshal.ReadIntPtr(one_ptr).ToInt64()];
+                    lod[i] = new UIntPtr[Marshal.ReadIntPtr(one_ptr).ToInt64()];
                     one_ptr += IntPtr.Size;
-                    for(int j = 0;j < lod[i].Length;j++)
+
+                    one_ptr = Marshal.ReadIntPtr(one_ptr);
+                    for (int j = 0;j < lod[i].Length;j++)
                     {
                         lod[i][j] = (UIntPtr)Marshal.ReadIntPtr(one_ptr).ToPointer();
                         one_ptr += IntPtr.Size;
@@ -130,35 +136,44 @@ namespace Sdcb.PaddleInference
 
         public unsafe void SetLod(UIntPtr[][] array)
         {
-            IntPtr lod = Marshal.AllocHGlobal((array.Length + 1) * IntPtr.Size);
-            IntPtr[] data = new IntPtr[array.Length];
+            int PD_OneDimArraySize_Count = 0;
+            foreach(var a in array)
+            {
+                PD_OneDimArraySize_Count += (a.Length + 2);
+            }
+
+            IntPtr lod = Marshal.AllocHGlobal((2 + array.Length + PD_OneDimArraySize_Count) * IntPtr.Size);  //new PD_TwoDimArraySize(); new all PD_OneDimArraySize
+            IntPtr data_array = lod + (2 * IntPtr.Size);  //
+
+            
+
 
             int offset = 0;
             Marshal.WriteIntPtr(lod, offset, new IntPtr(array.Length));
             offset += IntPtr.Size;
+            Marshal.WriteIntPtr(lod, offset, data_array);
+            offset = 0;
 
-            for(int i = 0;i < array.Length;i++)
+            IntPtr base_array = data_array + (array.Length * IntPtr.Size);
+            for (int i = 0;i < array.Length;i++)
             {
-                data[i] = Marshal.AllocHGlobal((array[i].Length + 1) * IntPtr.Size);
-                int offset2 = 0;
-                Marshal.WriteIntPtr(data[i], offset2, new IntPtr(array[i].Length));
-                offset2 += IntPtr.Size;
-                for (int j = 0;j < array.Length;j++)
-                {
-                    Marshal.WriteIntPtr(data[i], offset2, (IntPtr)array[i][j].ToPointer());
-                    offset2 += IntPtr.Size;
-                }
-
-                Marshal.WriteIntPtr(lod, offset, data[i]);
+                Marshal.WriteIntPtr(data_array, offset, base_array);
                 offset += IntPtr.Size;
+
+                Marshal.WriteIntPtr(base_array, new IntPtr(array[i].Length));
+                base_array += IntPtr.Size;
+
+                Marshal.WriteIntPtr(base_array, base_array + IntPtr.Size);
+                base_array += IntPtr.Size;
+
+                for (int j = 0;j < array[i].Length;j++)
+                {
+                    Marshal.WriteIntPtr(base_array, (IntPtr)array[i][j].ToPointer());
+                    base_array += IntPtr.Size;
+                }
             }
 
             PaddleNative.PD_TensorSetLod(_ptr, lod);
-
-            foreach(var d in data)
-            {
-                Marshal.FreeHGlobal(d);
-            }
             Marshal.FreeHGlobal(lod);
         }
 

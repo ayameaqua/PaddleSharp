@@ -53,7 +53,16 @@ namespace Sdcb.PaddleInference
 
             throw new FileNotFoundException($"Model file not find in model dir: {modelDir}");
         }
-
+        public static PaddleConfig FromModelDir2(string modelDir)
+        {
+            if (!Directory.Exists(modelDir))
+            {
+                throw new DirectoryNotFoundException(modelDir);
+            }
+            PaddleConfig c = new();
+            c.SetModelDir(modelDir);
+            return c;
+        }
         public static PaddleConfig FromModelFiles(string programPath, string paramsPath)
         {
             PaddleConfig c = new();
@@ -391,6 +400,16 @@ namespace Sdcb.PaddleInference
             fixed (byte* paramsPtr = paramsBytes)
             {
                 PaddleNative.PD_ConfigSetModel(_ptr, (IntPtr)programPtr, (IntPtr)paramsPtr);
+            }
+        }
+        public unsafe void SetModelDir(string modelDir)
+        {
+            if (modelDir == null) throw new ArgumentNullException(nameof(modelDir));
+            if (!Directory.Exists(modelDir)) throw new FileNotFoundException("modelDir not found", modelDir);
+            byte[] modelBytes = PaddleEncoding.GetBytes(modelDir);
+            fixed (byte* modelPtr = modelBytes)
+            {
+                PaddleNative.PD_ConfigSetModelDir(_ptr, (IntPtr)modelPtr);
             }
         }
 
